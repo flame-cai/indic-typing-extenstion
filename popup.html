@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Advanced Keyboard Transliterator</title>
+  <title>Multilingual Keyboard Transliterator</title>
   <style>
     body {
       width: 300px;
@@ -51,18 +51,26 @@
       margin-top: 10px;
       font-weight: bold;
     }
+    select {
+      margin-top: 10px;
+      padding: 5px;
+      width: 100%;
+    }
   </style>
 </head>
 <body>
-  <h2>Advanced Transliterator</h2>
-  <p>Enable transliteration (Latin to Devanagari):</p>
+  <h2>Multilingual Transliterator</h2>
   
+  <p>Enable transliteration:</p>
   <label class="switch">
     <input type="checkbox" id="transliterationToggle">
     <span class="slider"></span>
   </label>
   
   <div class="status" id="statusText">Transliteration is OFF</div>
+  
+  <p>Select language:</p>
+  <select id="languageSelector"></select>
   
   <script src="popup.js"></script>
 </body>

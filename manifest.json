@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Advanced Keyboard Transliterator",
-  "description": "Converts Latin keystrokes to Devanagari script with support for multi-character mappings",
+  "name": "Multilingual Keyboard Transliterator",
+  "description": "Converts Latin keystrokes to various Indic scripts in real-time",
   "version": "1.0",
   "permissions": [
     "storage"
@@ -12,7 +12,12 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": [
+        "language-modules/hindi.js", 
+        "language-modules/marathi.js",
+        "transliterator.js", 
+        "content.js"
+      ],
       "run_at": "document_start"
     }
   ]

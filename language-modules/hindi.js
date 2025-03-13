@@ -6,7 +6,7 @@
         name: "Hindi",
         code: "hi",
 
-      // Mapping dictionaries (converted from mappings_hindi.py)
+        // Consonants
         C: {
             'k': 'क', 
             'kqh': 'ख',
@@ -54,7 +54,7 @@
             'Qj': 'ज़',
             'QP': 'फ़',
             'QD': 'ड़',
-            'Qy': 'य़',
+            'Qy': 'य़',
             'Qn': 'ऩ',
             'Qr': 'ऱ',
             'QL': 'ऴ',
@@ -87,7 +87,6 @@
             'ou': 'ा' + 'ै',
             'aE': 'ॅ',
             'aO': 'ॉ',
-            // The following keys for AO/AE have been left empty per the original mapping
             'AO': '',
             'AE': '',
             'zau': '\u094F',
@@ -135,7 +134,6 @@
             'zau': "\u094F",
             'zo': '\u094A',
             'ze': '\u0943',
-            // The following empty keys from the python mapping have been omitted.
             'AO': 'ऑ',
             'AE': 'ॲ',
             'aE': '',
@@ -154,7 +152,6 @@
             '.': '.',
             'f': '।',
             'ff': '॥',
-            // Abbreviation and spacing signs – keys with empty names in Python are omitted.
             '0': '०',
             '1': '१',
             '2': '२',
@@ -171,295 +168,506 @@
             'w': '\u200C'  // ZWNJ
         },
         
+        // For easier comparison with simpler mappings
+        simpleMap: {},
+        complexMap: {},
+        
         // Flags to handle language rules
         flags: {
             makeNextVowelDependent: false,
-            use2CharsVowelNext: true
+            use2CharsVowelNext: true,
+            isBacktickPressed: false,
+            englishBypass: false
         },
         
-        /**
-         * Process the current input buffer and determine if a mapping should occur.
-         * The function examines the last 5, 4, 3, 2, and 1 characters (padding with spaces if needed)
-         * and then applies logic similar to the Python keyPressEvent.
-         *
-         * @param {Array} buffer - An array of strings (each a key pressed).
-         * @returns {Object} An object with keys:
-         *   found (boolean),
-         *   replacement (string),
-         *   deleteCount (number),
-         *   bufferUpdate: { start, end, replacement: [string] }
-         */
-        processBuffer: function(buffer) {
-            let text = buffer.join('');
-            let len = text.length;
-            
-            // Helper: pad a string on the left to a given length with spaces.
-            function padLeft(str, length) {
+        // Internal state
+        rawKeyBuffer: [],    // For tracking raw roman keys
+        outputBuffer: [],    // For the output Hindi text
+        
+        // Helper function to pad strings with spaces
+        padLeft: function(str, length) {
             return (" ".repeat(length) + str).slice(-length);
+        },
+        
+        // Function to get last N characters from raw key buffer
+        getLastChars: function(n) {
+            let rawText = this.rawKeyBuffer.join('');
+            if (rawText.length < n) {
+                return this.padLeft(rawText, n);
             }
-            
-            let key5 = padLeft(text.slice(-5), 5);
-            let key4 = padLeft(text.slice(-4), 4);
-            let key3 = padLeft(text.slice(-3), 3);
-            let key2 = padLeft(text.slice(-2), 2);
-            let key1 = text.slice(-1);
-            
-            // 1. EDGE CASE: if first char of key5 is a consonant and key5[2]=='r' and key5[4]=='u'
-            if (this.C[key5[0]] && key5[2] === 'r' && key5[4] === 'u') {
-            return {
-                found: true,
-                replacement: this.C[key5[0]] + this.v['Rri'],
-                deleteCount: 4,
-                bufferUpdate: { start: len - 4, end: len, replacement: [this.C[key5[0]] + this.v['Rri']] }
-            };
-            }
-            
-            // 2. Check if key5 (last 5 chars) exactly matches a consonant mapping.
-            if (this.C[key5]) {
-            if (key5 === 'sqhqr') {
+            return rawText.slice(-n);
+        },
+
+        // The main processBuffer function that conforms to the interface
+        processBuffer: function(buffer) {
+            const key = buffer[buffer.length - 1];
+            console.log('Raw buffer:', this.rawKeyBuffer);
+            console.log('Last key pressed:', key);
+            // Special key handling
+            if (key === 'Enter' || key === 'Return') {
                 return {
-                found: true,
-                replacement: this.C[key5],
-                deleteCount: 2,
-                bufferUpdate: { start: len - 2, end: len, replacement: [this.C[key5]] }
+                    found: true,
+                    replacement: '\n',
+                    deleteCount: 0,
+                    bufferUpdate: {
+                        start: buffer.length - 1,
+                        end: buffer.length,
+                        replacement: ['\n']
+                    }
                 };
-            } else {
-                let rep = this.C[key5];
-                if (key5 !== 'DqDqA') {
-                rep += this.misc['q'];  // auto-add halant
+            } else if (key === 'Backspace' || key === 'ArrowLeft' || key === 'ArrowRight' || 
+                    key === 'Shift' || key === 'Control' || key === 'Alt') {
+                // Pass through navigation and control keys
+                return {
+                    found: false,
+                    replacement: '',
+                    deleteCount: 0,
+                    bufferUpdate: {
+                        start: buffer.length - 1,
+                        end: buffer.length,
+                        replacement: []
+                    }
+                };
+            } else if (key === 'F5') {
+                // Reset all flags
+                this.flags.makeNextVowelDependent = false;
+                this.flags.use2CharsVowelNext = true;
+                return {
+                    found: true,
+                    replacement: '',
+                    deleteCount: buffer.length,
+                    bufferUpdate: {
+                        start: 0,
+                        end: buffer.length,
+                        replacement: []
+                    }
+                };
+            } else if (key === '`') {
+                // Toggle English bypass mode
+                this.flags.isBacktickPressed = true;
+                return {
+                    found: true,
+                    replacement: '',
+                    deleteCount: 0,
+                    bufferUpdate: {
+                        start: buffer.length - 1,
+                        end: buffer.length,
+                        replacement: []
+                    }
+                };
+            } else if (this.flags.englishBypass === true) {
+                return {
+                    found: true,
+                    replacement: key,
+                    deleteCount: 0,
+                    bufferUpdate: {
+                        start: buffer.length - 1,
+                        end: buffer.length,
+                        replacement: [key]
+                    }
+                };
+            } else if (this.flags.isBacktickPressed) {
+                if (/^[a-zA-Z]$/.test(key)) {
+                    this.flags.isBacktickPressed = false;
+                    return {
+                        found: true,
+                        replacement: key,
+                        deleteCount: 0,
+                        bufferUpdate: {
+                            start: buffer.length - 1,
+                            end: buffer.length,
+                            replacement: [key]
+                        }
+                    };
                 }
+                return {
+                    found: false,
+                    replacement: '',
+                    deleteCount: 0,
+                    bufferUpdate: {
+                        start: buffer.length - 1,
+                        end: buffer.length,
+                        replacement: []
+                    }
+                };
+            }
+
+            this.rawKeyBuffer.push(key);
+
+            // // Make a copy of the buffer for our processing
+            // // this.rawKeyBuffer = buffer.slice();
+            // if (!this.rawKeyBuffer || this.rawKeyBuffer.length === 0) {
+            //     // Initialize if empty
+            //     this.rawKeyBuffer = buffer.slice();
+            // } else {
+            //     // Just add the new key
+            //     this.rawKeyBuffer.push(key);
+            // }
+            
+            // Get the last 5, 4, 3, 2, 1 characters from raw buffer
+            let key_5 = this.getLastChars(5);
+            let key_4 = this.getLastChars(4);
+            let key_3 = this.getLastChars(3);
+            let key_2 = this.getLastChars(2);
+            let key_1 = this.getLastChars(1);
+            
+            // Process 5-character sequences
+            if (key_5 in this.C) {
+                if (key_5 === 'sqhqr') {
+                    return {
+                        found: true,
+                        replacement: this.C[key_5],
+                        deleteCount: 4,
+                        bufferUpdate: {
+                            start: buffer.length - 5,
+                            end: buffer.length,
+                            replacement: [this.C[key_5]]
+                        }
+                    };
+                } else {
+                    const replacement = key_5 !== 'DqDqA' ? this.C[key_5] + this.misc['q'] : this.C[key_5];
+                    this.flags.makeNextVowelDependent = true;
+                    this.flags.use2CharsVowelNext = true;
+                    return {
+                        found: true,
+                        replacement: replacement,
+                        deleteCount: 4,
+                        bufferUpdate: {
+                            start: buffer.length - 5,
+                            end: buffer.length,
+                            replacement: [replacement]
+                        }
+                    };
+                }
+            }
+            
+            // Special edge case for consonant + 'r' + 'u'
+            if (key_5[0] in this.C && key_5[2] === 'r' && key_5[4] === 'u') {
+                const replacement = this.C[key_5[0]] + this.v['Rri'];
+                this.flags.makeNextVowelDependent = true;
+                return {
+                    found: true,
+                    replacement: replacement,
+                    deleteCount: 4,
+                    bufferUpdate: {
+                        start: buffer.length - 5,
+                        end: buffer.length,
+                        replacement: [replacement]
+                    }
+                };
+            }
+            
+            // Process 4-character sequences
+            if (key_4 in this.C) {
+                let replacement = '';
+                if (['Qkqh', 'QDqh'].includes(key_4)) {
+                    replacement = this.C[key_4] + this.misc['q'];
+                } else if (key_4 === 'chqh') {
+                    replacement = this.C[key_4] + this.misc['q'];
+                } else if (key_4 === 'JYqA') {
+                    replacement = this.C[key_4];
+                } else {
+                    replacement = this.C[key_4] + this.misc['q'];
+                }
+                
                 this.flags.makeNextVowelDependent = true;
                 this.flags.use2CharsVowelNext = true;
+                
                 return {
-                found: true,
-                replacement: rep,
-                deleteCount: 4,
-                bufferUpdate: { start: len - 4, end: len, replacement: [rep] }
+                    found: true,
+                    replacement: replacement,
+                    deleteCount: 3,
+                    bufferUpdate: {
+                        start: buffer.length - 4,
+                        end: buffer.length,
+                        replacement: [replacement]
+                    }
                 };
             }
+            
+            // Process vowels - check LqLqi type first
+            if (['LqLqi', 'LqLqI'].includes(key_5)) {
+                this.flags.makeNextVowelDependent = false;
+                return {
+                    found: true,
+                    replacement: this.v[key_5],
+                    deleteCount: 4,
+                    bufferUpdate: {
+                        start: buffer.length - 5,
+                        end: buffer.length,
+                        replacement: [this.v[key_5]]
+                    }
+                };
             }
             
-            // 3. If key4 is in C, with special cases
-            if (this.C[key4]) {
-            if (['Qkqh','QDqh','chqh'].indexOf(key4) !== -1) {
-                let rep = this.C[key4] + this.misc['q'];
+            if (['LqLqi', 'LqLqI'].includes(key_5)) {
+                this.flags.makeNextVowelDependent = false;
+                return {
+                    found: true,
+                    replacement: this.V[key_5],
+                    deleteCount: 4,
+                    bufferUpdate: {
+                        start: buffer.length - 5,
+                        end: buffer.length,
+                        replacement: [this.V[key_5]]
+                    }
+                };
+            }
+            
+            // Process 3-character sequences
+            if (key_3 in this.C) {
+                let replacement = '';
+                if (key_3 === 'ZHA') {
+                    replacement = this.C[key_3];
+                } else {
+                    replacement = this.C[key_3] + this.misc['q'];
+                }
+                
                 this.flags.makeNextVowelDependent = true;
                 this.flags.use2CharsVowelNext = true;
+                
                 return {
-                found: true,
-                replacement: rep,
-                deleteCount: 3,
-                bufferUpdate: { start: len - 3, end: len, replacement: [rep] }
+                    found: true,
+                    replacement: replacement,
+                    deleteCount: 2,
+                    bufferUpdate: {
+                        start: buffer.length - 3,
+                        end: buffer.length,
+                        replacement: [replacement]
+                    }
                 };
-            }
-            if (key4 === 'JYqA') {
-                return {
-                found: true,
-                replacement: this.C[key4],
-                deleteCount: 3,
-                bufferUpdate: { start: len - 3, end: len, replacement: [this.C[key4]] }
-                };
-            }
-            // Default for key4
-            let rep = this.C[key4] + this.misc['q'];
-            this.flags.makeNextVowelDependent = true;
-            this.flags.use2CharsVowelNext = true;
-            return {
-                found: true,
-                replacement: rep,
-                deleteCount: 3,
-                bufferUpdate: { start: len - 3, end: len, replacement: [rep] }
-            };
             }
             
-            // 4. If key3 is in C
-            if (this.C[key3]) {
-            if (key3 === 'ZHA') {
-                return {
-                found: true,
-                replacement: this.C[key3],
-                deleteCount: 1,
-                bufferUpdate: { start: len - 1, end: len, replacement: [this.C[key3]] }
-                };
-            } else {
-                let rep = this.C[key3] + this.misc['q'];
-                this.flags.makeNextVowelDependent = true;
-                this.flags.use2CharsVowelNext = true;
-                return {
-                found: true,
-                replacement: rep,
-                deleteCount: 2,
-                bufferUpdate: { start: len - 2, end: len, replacement: [rep] }
-                };
-            }
-            }
-            
-            // 5. If key3 is in misc (for items like AUM)
-            if (this.misc[key3]) {
-            this.flags.makeNextVowelDependent = false;
-            this.flags.use2CharsVowelNext = true;
-            return {
-                found: true,
-                replacement: this.misc[key3],
-                deleteCount: 1,
-                bufferUpdate: { start: len - 1, end: len, replacement: [this.misc[key3]] }
-            };
-            }
-            
-            // 6. If key2 is in C
-            if (this.C[key2]) {
-            if (['Zg','Zj','ZD','Zb','ZK'].indexOf(key2) !== -1) {
-                return {
-                found: true,
-                replacement: this.C[key2],
-                deleteCount: 1,
-                bufferUpdate: { start: len - 1, end: len, replacement: [this.C[key2]] }
-                };
-            } else if (['ch','Qk','Qg','Qj','QP','QD','Qy','Qn','Qr','QL','Qv'].indexOf(key2) !== -1) {
-                let rep = this.C[key2] + this.misc['q'];
-                this.flags.makeNextVowelDependent = true;
-                this.flags.use2CharsVowelNext = true;
-                return {
-                found: true,
-                replacement: rep,
-                deleteCount: 1,
-                bufferUpdate: { start: len - 1, end: len, replacement: [rep] }
-                };
-            } else {
-                let rep = this.C[key2] + this.misc['q'];
-                this.flags.makeNextVowelDependent = true;
-                this.flags.use2CharsVowelNext = true;
-                return {
-                found: true,
-                replacement: rep,
-                deleteCount: 1,
-                bufferUpdate: { start: len - 1, end: len, replacement: [rep] }
-                };
-            }
-            }
-            
-            // 7. If key2 is in misc
-            if (this.misc[key2]) {
-            this.flags.makeNextVowelDependent = false;
-            this.flags.use2CharsVowelNext = true;
-            return {
-                found: true,
-                replacement: this.misc[key2],
-                deleteCount: 1,
-                bufferUpdate: { start: len - 1, end: len, replacement: [this.misc[key2]] }
-            };
-            }
-            
-            // 8. If key1 is in misc
-            if (this.misc[key1]) {
-            if (key2 === 'q ') {
-                return {
-                found: true,
-                replacement: this.misc[' '],
-                deleteCount: 1,
-                bufferUpdate: { start: len - 1, end: len, replacement: [this.misc[' ']] }
-                };
-            } else if (['w','W'].indexOf(key1) !== -1) {
-                return {
-                found: true,
-                replacement: this.misc[key1],
-                deleteCount: 0,
-                bufferUpdate: { start: len, end: len, replacement: [this.misc[key1]] }
-                };
-            } else {
+            if (key_3 in this.misc) {
                 this.flags.makeNextVowelDependent = false;
                 this.flags.use2CharsVowelNext = true;
                 return {
-                found: true,
-                replacement: this.misc[key1],
-                deleteCount: 0,
-                bufferUpdate: { start: len - 1, end: len, replacement: [this.misc[key1]] }
+                    found: true,
+                    replacement: this.misc[key_3],
+                    deleteCount: 2,
+                    bufferUpdate: {
+                        start: buffer.length - 3,
+                        end: buffer.length,
+                        replacement: [this.misc[key_3]]
+                    }
                 };
             }
+            
+            // Process 2-character sequences
+            if (key_2 in this.C) {
+                let replacement = '';
+                if (['Zg', 'Zj', 'ZD', 'Zb', 'ZK'].includes(key_2)) {
+                    replacement = this.C[key_2];
+                } else {
+                    replacement = this.C[key_2] + this.misc['q'];
+                }
+                
+                this.flags.makeNextVowelDependent = true;
+                this.flags.use2CharsVowelNext = true;
+                
+                return {
+                    found: true,
+                    replacement: replacement,
+                    deleteCount: 1,
+                    bufferUpdate: {
+                        start: buffer.length - 2,
+                        end: buffer.length,
+                        replacement: [replacement]
+                    }
+                };
             }
             
-            // 9. Vowel logic for key5
-            if (['LqLqi','LqLqI'].indexOf(key5) !== -1) {
-            this.flags.makeNextVowelDependent = false;
-            return {
-                found: true,
-                replacement: this.V[key5],
-                deleteCount: 4,
-                bufferUpdate: { start: len - 4, end: len, replacement: [this.V[key5]] }
-            };
-            }
-            if (['Lqlqi','LqlqI'].indexOf(key5) !== -1) {
-            this.flags.makeNextVowelDependent = false;
-            return {
-                found: true,
-                replacement: this.v[key5],
-                deleteCount: 4,
-                bufferUpdate: { start: len - 4, end: len, replacement: [this.v[key5]] }
-            };
-            }
-            
-            // 10. Vowel logic for single-character vowels:
-            if (this.V[key1] || this.v[key1]) {
-            if (!this.flags.makeNextVowelDependent) {
-                // Insert as independent vowel
+            if (key_2 in this.misc) {
                 this.flags.makeNextVowelDependent = false;
                 this.flags.use2CharsVowelNext = true;
                 return {
-                found: true,
-                replacement: this.V[key1],
-                deleteCount: 0,
-                bufferUpdate: { start: len - 1, end: len, replacement: [this.V[key1]] }
+                    found: true,
+                    replacement: this.misc[key_2],
+                    deleteCount: 1,
+                    bufferUpdate: {
+                        start: buffer.length - 2,
+                        end: buffer.length,
+                        replacement: [this.misc[key_2]]
+                    }
                 };
-            } else {
-                // Insert as dependent vowel
-                return {
-                found: true,
-                replacement: this.v[key1],
-                deleteCount: 0,
-                bufferUpdate: { start: len - 1, end: len, replacement: [this.v[key1]] }
-                };
-            }
             }
             
-            // 11. If key1 is a consonant, insert it with auto-halant.
-            if (this.C[key1]) {
-            let rep = this.C[key1] + this.misc['q'];
-            this.flags.makeNextVowelDependent = true;
-            this.flags.use2CharsVowelNext = true;
+            // Process 2-character vowels
+            if (key_2 in this.v && this.flags.makeNextVowelDependent) {
+                this.flags.makeNextVowelDependent = false;
+                return {
+                    found: true,
+                    replacement: this.v[key_2],
+                    deleteCount: 1,
+                    bufferUpdate: {
+                        start: buffer.length - 2,
+                        end: buffer.length,
+                        replacement: [this.v[key_2]]
+                    }
+                };
+            }
+            
+            if (key_2 in this.V && !this.flags.makeNextVowelDependent) {
+                this.flags.makeNextVowelDependent = false;
+                return {
+                    found: true,
+                    replacement: this.V[key_2],
+                    deleteCount: 1,
+                    bufferUpdate: {
+                        start: buffer.length - 2,
+                        end: buffer.length,
+                        replacement: [this.V[key_2]]
+                    }
+                };
+            }
+            
+            // Process 1-character sequences
+            if (key_1 in this.misc) {
+                if (key_2 === 'q ') {
+                    this.flags.makeNextVowelDependent = false;
+                    return {
+                        found: true,
+                        replacement: this.misc[' '],
+                        deleteCount: 1,
+                        bufferUpdate: {
+                            start: buffer.length - 2,
+                            end: buffer.length,
+                            replacement: [this.misc[' ']]
+                        }
+                    };
+                } else if (['w', 'W'].includes(key_1)) {
+                    return {
+                        found: true,
+                        replacement: this.misc[key_1],
+                        deleteCount: 0,
+                        bufferUpdate: {
+                            start: buffer.length - 1,
+                            end: buffer.length,
+                            replacement: [this.misc[key_1]]
+                        }
+                    };
+                } else {
+                    this.flags.makeNextVowelDependent = false;
+                    this.flags.use2CharsVowelNext = true;
+                    return {
+                        found: true,
+                        replacement: this.misc[key_1],
+                        deleteCount: 0,
+                        bufferUpdate: {
+                            start: buffer.length - 1,
+                            end: buffer.length,
+                            replacement: [this.misc[key_1]]
+                        }
+                    };
+                }
+            }
+            
+            // Handle single-character vowels
+            if (this.V[key_1] && !this.flags.makeNextVowelDependent) {
+                this.flags.makeNextVowelDependent = false;
+                this.flags.use2CharsVowelNext = true;
+                return {
+                    found: true,
+                    replacement: this.V[key_1],
+                    deleteCount: 0,
+                    bufferUpdate: {
+                        start: buffer.length - 1,
+                        end: buffer.length,
+                        replacement: [this.V[key_1]]
+                    }
+                };
+            }
+            
+            if (this.v[key_1] && this.flags.makeNextVowelDependent) {
+                this.flags.makeNextVowelDependent = false;
+                return {
+                    found: true,
+                    replacement: this.v[key_1],
+                    deleteCount: 0,
+                    bufferUpdate: {
+                        start: buffer.length - 1,
+                        end: buffer.length,
+                        replacement: [this.v[key_1]]
+                    }
+                };
+            }
+            
+            // If key_1 is a consonant, insert it with auto-halant
+            if (this.C[key_1]) {
+                const replacement = this.C[key_1] + this.misc['q'];
+                this.flags.makeNextVowelDependent = true;
+                this.flags.use2CharsVowelNext = true;
+
+                this.rawKeyBuffer.push('q');
+
+                return {
+                    found: true,
+                    replacement: replacement,
+                    deleteCount: 0,
+                    bufferUpdate: {
+                        start: buffer.length - 1,
+                        end: buffer.length,
+                        replacement: [replacement]
+                    }
+                };
+            }
+
+            if (!found) {
+                console.log('No mapping found for:', key);
+                return {
+                    found: true,
+                    replacement: key,
+                    deleteCount: 0,
+                    bufferUpdate: {
+                        start: buffer.length - 1,
+                        end: buffer.length,
+                        replacement: [key]
+                    }
+                };
+            }
+
+            // If no mapping was found, just keep the key as-is in the output
             return {
                 found: true,
-                replacement: rep,
+                replacement: key,
                 deleteCount: 0,
-                bufferUpdate: { start: len - 1, end: len, replacement: [rep] }
+                bufferUpdate: {
+                    start: buffer.length - 1,
+                    end: buffer.length,
+                    replacement: [key]
+                }
             };
-            }
             
-            // If no mapping was found, return false.
-            return { found: false };
         },
-        
-        // (Optionally, you could keep a defaultProcessBuffer that falls back to simple character mapping.)
+
+        // Function to reset the system completely
+        reset: function() {
+            this.rawKeyBuffer = [];
+            this.flags.makeNextVowelDependent = false;
+            this.flags.use2CharsVowelNext = true;
+            this.flags.isBacktickPressed = false;
+            this.flags.englishBypass = false;
+            return {
+                found: true,
+                replacement: '',
+                deleteCount: 0,
+                bufferUpdate: {
+                    start: 0,
+                    end: 0,
+                    replacement: []
+                }
+            };
+        },
+
+        // Additional method for API compatibility
         defaultProcessBuffer: function(buffer) {
-            // Fallback: simply return the last key as-is.
-            return { found: false };
+            return this.processBuffer(buffer);
         },
-        
-        // A sample function to process a key event (to be wired into your text input)
-        // This function would call processBuffer() on the current buffer (an array of key strings)
-        // and then update the display accordingly.
-        handleKeyEvent: function(event, buffer) {
-            // (In an actual implementation you would update the buffer based on the key event)
-            // For example:
-            buffer.push(event.key);
-            let result = this.processBuffer(buffer);
-            if (result.found) {
-            // Delete result.deleteCount keys from buffer and append the replacement.
-            buffer.splice(buffer.length - result.deleteCount, result.deleteCount);
-            buffer.push(result.replacement);
-            }
-            // Return the updated output string.
-            return buffer.join('');
+
+        // Toggle English bypass mode
+        toggleEnglishBypass: function() {
+            this.flags.englishBypass = !this.flags.englishBypass;
+            return this.flags.englishBypass;
         }
-    }; 
+    };
 })();
-        

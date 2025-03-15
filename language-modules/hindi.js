@@ -201,6 +201,7 @@
         // The main processBuffer function that conforms to the interface
         processBuffer: function(buffer) {
             const key = buffer[buffer.length - 1];
+            this.rawKeyBuffer.push(key);
             console.log('Raw buffer:', this.rawKeyBuffer);
             console.log('Last key pressed:', key);
             // Special key handling
@@ -292,7 +293,7 @@
                 };
             }
 
-            this.rawKeyBuffer.push(key);
+            
 
             // // Make a copy of the buffer for our processing
             // // this.rawKeyBuffer = buffer.slice();
@@ -328,6 +329,7 @@
                     const replacement = key_5 !== 'DqDqA' ? this.C[key_5] + this.misc['q'] : this.C[key_5];
                     this.flags.makeNextVowelDependent = true;
                     this.flags.use2CharsVowelNext = true;
+                    this.rawKeyBuffer.push('q');
                     return {
                         found: true,
                         replacement: replacement,
@@ -362,12 +364,15 @@
                 let replacement = '';
                 if (['Qkqh', 'QDqh'].includes(key_4)) {
                     replacement = this.C[key_4] + this.misc['q'];
+                    this.rawKeyBuffer.push('q');
                 } else if (key_4 === 'chqh') {
                     replacement = this.C[key_4] + this.misc['q'];
+                    this.rawKeyBuffer.push('q');
                 } else if (key_4 === 'JYqA') {
                     replacement = this.C[key_4];
                 } else {
                     replacement = this.C[key_4] + this.misc['q'];
+                    this.rawKeyBuffer.push('q');
                 }
                 
                 this.flags.makeNextVowelDependent = true;
@@ -421,6 +426,7 @@
                     replacement = this.C[key_3];
                 } else {
                     replacement = this.C[key_3] + this.misc['q'];
+                    this.rawKeyBuffer.push('q');
                 }
                 
                 this.flags.makeNextVowelDependent = true;
@@ -460,6 +466,7 @@
                     replacement = this.C[key_2];
                 } else {
                     replacement = this.C[key_2] + this.misc['q'];
+                    this.rawKeyBuffer.push('q');
                 }
                 
                 this.flags.makeNextVowelDependent = true;
@@ -494,18 +501,22 @@
             
             // Process 2-character vowels
             if (key_2 in this.v && this.flags.makeNextVowelDependent) {
+                console.log('trackerr:', key_2);
                 this.flags.makeNextVowelDependent = false;
                 return {
                     found: true,
                     replacement: this.v[key_2],
-                    deleteCount: 1,
+                    deleteCount: 0,
                     bufferUpdate: {
-                        start: buffer.length - 2,
+                        start: buffer.length-1,
                         end: buffer.length,
                         replacement: [this.v[key_2]]
                     }
                 };
             }
+
+            
+
             
             if (key_2 in this.V && !this.flags.makeNextVowelDependent) {
                 this.flags.makeNextVowelDependent = false;
@@ -561,6 +572,35 @@
                     };
                 }
             }
+
+
+            // Missing handling for post auto halant logic
+            if (key_2 === 'qa') {
+                this.flags.makeNextVowelDependent = true;
+                return {
+                    found: true,
+                    replacement: '',
+                    deleteCount: 1,
+                    bufferUpdate: {
+                        start: buffer.length - 1,
+                        end: buffer.length,
+                        replacement: ['']
+                    }
+                };
+            } else if (['qi', 'qo', 'qe', 'qu'].includes(key_2)) {
+                this.flags.makeNextVowelDependent = true;
+                const vowel = key_2[1];
+                return {
+                    found: true,
+                    replacement: this.v[vowel],
+                    deleteCount: 1,
+                    bufferUpdate: {
+                        start: buffer.length - 2,
+                        end: buffer.length - 1,
+                        replacement: [this.v[vowel]]
+                    }
+                };
+            }
             
             // Handle single-character vowels
             if (this.V[key_1] && !this.flags.makeNextVowelDependent) {
@@ -580,6 +620,7 @@
             
             if (this.v[key_1] && this.flags.makeNextVowelDependent) {
                 this.flags.makeNextVowelDependent = false;
+                console.log('okay here')
                 return {
                     found: true,
                     replacement: this.v[key_1],
